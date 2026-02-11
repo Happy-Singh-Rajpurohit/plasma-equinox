@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D CTF Game</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "socket.io-client": "./libs/socket.io.esm.min.js",
+                "gsap": "https://unpkg.com/gsap@3.12.5/index.js",
+                "firebase-config": "./firebaseConfig.js"
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+</head>
+
+<body>
+    <!-- UI Layer -->
+    <div id="ui-layer">
+
+        <!-- Login / Landing Page -->
+        <div id="login-screen" class="panel glass">
+            <h1 class="glitch" data-text="PLASMA EQUINOX">PLASMA EQUINOX</h1>
+            <p class="subtitle">TEAM CONTEST MODE</p>
+
+            <!-- Container for Auth Flow -->
+            <div id="auth-container">
+                <div id="auth-forms">
+                    <!-- Step 1: Login / Register -->
+                    <div id="step-auth">
+                        <div class="input-group">
+                            <input type="email" id="auth-email" placeholder="EMAIL ADDRESS">
+                        </div>
+                        <input type="password" id="auth-password" placeholder="PASSWORD">
+                        <div style="text-align: right; margin-bottom: 10px;">
+                            <button id="btn-forgot-pass"
+                                style="background:none; border:none; color: #00f3ff; cursor: pointer; font-size: 0.8em; text-decoration: underline;">FORGOT?</button>
+                        </div>
+                    </div>
+
+                    <!-- Roll Number only needed for Register? Or both? Let's add it for Register -->
+                    <div class="input-group hidden" id="register-fields">
+                        <input type="text" id="auth-roll" placeholder="ROLL NUMBER" maxlength="20">
+                        <input type="text" id="auth-name" placeholder="AGENT NAME" maxlength="12">
+                    </div>
+
+                    <div class="auth-buttons">
+                        <button id="btn-login" class="cyber-btn">LOGIN</button>
+                        <button id="btn-show-register" class="cyber-btn outline">REGISTER AGENT</button>
+                    </div>
+
+                    <button id="btn-register-submit" class="cyber-btn hidden">INITIALIZE AGENT</button>
+                    <button id="btn-auth-back" class="btn-back hidden"> &lt; BACK TO LOGIN</button>
+                </div>
+
+                <p id="auth-error" class="error-msg"></p>
+
+                <div id="login-leaderboard"
+                    style="margin-top: 20px; width: 100%; max-height: 200px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
+                    <h3 style="font-size: 1rem; color: #00ffff; text-shadow: 0 0 5px #00ffff;">LIVE INTEL</h3>
+                    <ul id="public-leaderboard-list"
+                        style="list-style: none; padding: 0; font-family: 'Courier New', monospace; font-size: 0.8rem; text-align: left;">
+                        <li>CONNECTING TO SAT-LINK...</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Step 2: Team Choice -->
+            <div id="step-team" class="hidden">
+                <p id="welcome-msg">WELCOME, AGENT.</p>
+                <button id="btn-create-team" class="cyber-btn">CREATE TEAM</button>
+                <button id="btn-join-team" class="cyber-btn">JOIN TEAM</button>
+                <button id="btn-logout" class="cyber-btn red">LOGOUT</button>
+            </div>
+
+            <!-- Step 3: Join -->
+            <div id="step-join" class="hidden">
+                <input type="text" id="team-code-input" placeholder="ENTER TEAM CODE" maxlength="6">
+                <button id="btn-submit-join" class="cyber-btn">CONNECT</button>
+                <button class="btn-back step-back"> &lt; BACK</button>
+            </div>
+
+            <!-- Step 3: Create -->
+            <div id="step-create" class="hidden">
+                <input type="text" id="new-team-name" placeholder="TEAM NAME" maxlength="12">
+                <button id="btn-submit-create" class="cyber-btn">DEPLOY</button>
+                <button class="btn-back step-back"> &lt; BACK</button>
+            </div>
+        </div>
+
+        <!-- In-Game HUD (Hidden initially) -->
+        <div id="game-hud" class="hidden">
+            <div id="team-info" class="panel glass-mini">
+                <h3 id="hud-team-name">TEAM: ---</h3>
+                <h2 id="hud-team-code">CODE: ---</h2>
+            </div>
+
+            <div id="leaderboard" class="panel glass-mini">
+                <h3>TOP TEAMS</h3>
+                <ul id="leaderboard-list">
+                    <!-- <li><span>Team A</span> <span>1200</span></li> -->
+                </ul>
+            </div>
+
+            <div id="score-board">
+                TEAM SCORE: <span id="team-score">0</span>
+            </div>
+
+            <div id="crosshair">+</div>
+
+            <div id="instructions-mini">
+                WASD to Move | E to Interact
+            </div>
+        </div>
+
+        <!-- Question Modal -->
+        <div id="question-modal" class="hidden">
+            <div class="modal-content glass">
+                <h2 id="q-text">DECRYPTING...</h2>
+                <input type="text" id="q-answer" placeholder="ENTER KEY...">
+                <div class="modal-actions">
+                    <button id="q-submit" class="cyber-btn">TRANSMIT</button>
+                    <button id="q-cancel" class="cyber-btn red">ABORT</button>
+                </div>
+                <p id="q-feedback"></p>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module" src="game.js?v=contest_release"></script>
+</body>
+
+</html>
