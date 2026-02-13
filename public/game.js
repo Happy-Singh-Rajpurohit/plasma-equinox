@@ -15,7 +15,9 @@ let raycaster;
 const flags = new Map();
 const npcMeshes = [];
 const collidables = [];
+const turrets = []; // New
 let player;
+let playerHP = 100; // New
 let cameraTarget;
 let isGameActive = false;
 let isAuthenticated = false; // New flag
@@ -174,6 +176,7 @@ function animate() {
                 updatePlayer(delta);
             }
             updateCamera();
+            updateTurrets(time); // New
         } else {
             // Login Screen Orbit
             const r = 100;
@@ -230,6 +233,31 @@ function createPlayer() {
     rightArm.castShadow = true;
     group.add(rightArm);
 
+    // Gun (Rifle)
+    const rifle = new THREE.Group();
+    rifle.position.set(0, -0.2, 0.4);
+
+    // Body relative to arm
+    const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    rifle.add(rBody);
+    // Barrel
+    const rBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+    rBarrel.rotation.x = Math.PI / 2;
+    rBarrel.position.set(0, 0.05, 0.5);
+    rifle.add(rBarrel);
+    // Mag
+    const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.1), new THREE.MeshStandardMaterial({ color: 0x050505 }));
+    rMag.position.set(0, -0.15, 0.1);
+    rifle.add(rMag);
+    // Scope
+    const rScope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.2), new THREE.MeshStandardMaterial({ color: 0x66ccff }));
+    rScope.rotation.x = Math.PI / 2;
+    rScope.position.set(0, 0.12, 0.1);
+    rifle.add(rScope);
+
+    rightArm.add(rifle);
+    // player.gun = rifle; // MOVED: player is not defined yet
+
     // Legs
     const legGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
     const leftLeg = new THREE.Mesh(legGeo, pantsMat);
@@ -251,6 +279,7 @@ function createPlayer() {
         parts: {
             leftArm, rightArm, leftLeg, rightLeg
         },
+        gun: rifle, // Assigned here
         walkTime: 0,
         onGround: false // Ensure onGround is initialized
     };
@@ -310,23 +339,127 @@ function setupInput() {
     // Start with default view
     mouseX = Math.PI; // Face forward
     mouseY = 0.2;
+
+    // Shooting Listener
+    document.addEventListener('mousedown', (e) => {
+        if (isGameActive && isAuthenticated && e.button === 0) {
+            shoot();
+        }
+    });
+}
+
+function shoot() {
+    if (!player) return;
+
+    // Raycast from Camera (Crosshair Center)
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+    // Visual Tracer
+    const tracerMat = new THREE.LineBasicMaterial({ color: 0xffff00 });
+    const points = [];
+
+    // Start tracer from Gun Barrel
+    const gunWorldPos = new THREE.Vector3();
+    if (player.gun) {
+        player.gun.getWorldPosition(gunWorldPos);
+        gunWorldPos.add(new THREE.Vector3(0, 0.1, 0.5).applyQuaternion(player.gun.getWorldQuaternion(new THREE.Quaternion()))); // Tip of barrel approx
+    } else {
+        gunWorldPos.copy(player.mesh.position).add(new THREE.Vector3(0, 1.5, 0));
+    }
+
+    // Check hits
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    let target = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(100));
+
+    let hitObject = null;
+
+    // Filter self and find first hit
+    for (const hit of intersects) {
+        // Simple check: ignore player parts
+        if (hit.object.isPlayerPart || hit.distance < 2) continue; // Distance check helps ignore near-clipping player mesh
+
+        target = hit.point;
+        hitObject = hit.object;
+        break;
+    }
+
+    points.push(gunWorldPos);
+    points.push(target);
+
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const line = new THREE.Line(geo, tracerMat);
+    scene.add(line);
+
+    // Fade out tracer
+    setTimeout(() => scene.remove(line), 50);
+
+    // Damage Logic
+    if (hitObject) {
+        // Check if it's a turret
+        // Traverse up to find group or userData
+        let obj = hitObject;
+        while (obj) {
+            if (obj.userData && obj.userData.type === 'turret') {
+                obj.userData.hp -= 5; // Rifle does less damage per shot but faster fire? Kept at 5 for now.
+
+                // Flash Red
+                if (obj.material && obj.material.color) { // Check if mat exists
+                    const oldColor = obj.material.color.getHex();
+                    obj.material.color.setHex(0xffaaaa);
+                    setTimeout(() => {
+                        if (obj && obj.material) obj.material.color.setHex(oldColor);
+                    }, 50);
+                }
+
+                if (obj.userData.hp <= 0) {
+                    destroyTurret(obj);
+                }
+                break;
+            }
+            obj = obj.parent;
+        }
+    }
 }
 
 function updateCamera() {
-    // Camera orbital position calculated from mouseX/mouseY around player
     if (!player) return;
-    const dist = 8;
-    const height = 4;
 
-    const cx = player.mesh.position.x + dist * Math.sin(mouseX) * Math.cos(mouseY);
-    const cz = player.mesh.position.z + dist * Math.cos(mouseX) * Math.cos(mouseY);
-    let cy = player.mesh.position.y + height + dist * Math.sin(mouseY);
+    // Over-the-shoulder offsets
+    const offsetH = 4; // Distance behind
+    const offsetV = 2.5; // Height
+    const offsetSide = 1.5; // Right side
 
-    // Constraint: Minimum Height (Ground Level + Buffer)
-    if (cy < 0.5) cy = 0.5;
+    // Calculate camera position based on mouseX/Y
+    // mouseX controls Yaw (Player & Camera)
+    // mouseY controls Pitch (Camera only)
+
+    // Camera Rotation
+    const camRotX = mouseY;
+    const camRotY = mouseX;
+
+    // Position relative to player
+    const cp = player.mesh.position;
+
+    // Calculate offset vector based on Yaw
+    const sideVec = new THREE.Vector3(Math.cos(camRotY), 0, -Math.sin(camRotY)).multiplyScalar(offsetSide);
+    const backVec = new THREE.Vector3(Math.sin(camRotY), 0, Math.cos(camRotY)).multiplyScalar(offsetH);
+
+    const cx = cp.x + backVec.x + sideVec.x;
+    const cz = cp.z + backVec.z + sideVec.z;
+    const cy = cp.y + offsetV + (Math.sin(camRotX) * offsetH);
 
     camera.position.set(cx, cy, cz);
-    camera.lookAt(player.mesh.position.x, player.mesh.position.y + 2, player.mesh.position.z);
+
+    // Look Point (Forward from player + pitch)
+    const lookTarget = cp.clone().add(new THREE.Vector3(
+        -Math.sin(camRotY) * 20,
+        -Math.sin(camRotX) * 20 + 2, // Pitch look
+        -Math.cos(camRotY) * 20
+    ));
+    camera.lookAt(lookTarget);
+
+    // Sync Player Rotation to Camera Yaw immediately (TPS Lock)
+    player.mesh.rotation.y = camRotY + Math.PI; // +PI to face away from camera
 }
 
 function checkCollision(position) {
@@ -381,7 +514,17 @@ function updatePlayer(delta) {
         let rotDiff = targetRot - player.mesh.rotation.y;
         while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
         while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-        player.mesh.rotation.y += rotDiff * 10 * delta;
+
+        // Smother Rotation
+        player.mesh.rotation.y += rotDiff * 5 * delta;
+
+        // Tilt into turn (Bank)
+        const tilt = THREE.MathUtils.clamp(rotDiff, -0.5, 0.5);
+        player.mesh.rotation.z = THREE.MathUtils.lerp(player.mesh.rotation.z, -tilt * 0.5, delta * 5);
+
+        // Run Tilt (Forward)
+        const runTilt = (keyState['ShiftLeft'] || keyState['ShiftRight']) ? 0.2 : 0;
+        player.mesh.rotation.x = THREE.MathUtils.lerp(player.mesh.rotation.x, runTilt, delta * 5);
 
         let speedMultiplier = 1.0;
         if (keyState['ShiftLeft'] || keyState['ShiftRight']) {
@@ -412,6 +555,10 @@ function updatePlayer(delta) {
         player.parts.rightLeg.rotation.x = 0;
         player.parts.leftArm.rotation.x = 0;
         player.parts.rightArm.rotation.x = 0;
+
+        // Reset Body Tilt
+        player.mesh.rotation.z = THREE.MathUtils.lerp(player.mesh.rotation.z, 0, delta * 5);
+        player.mesh.rotation.x = THREE.MathUtils.lerp(player.mesh.rotation.x, 0, delta * 5);
     }
 
     if (player.onGround && keyState['Space']) {
@@ -459,39 +606,56 @@ const ROAD_WIDTH = 10;
 const UNIT_SIZE = BLOCK_SIZE + ROAD_WIDTH;
 const ROADS = { x: [], z: [] }; // Store road coordinates
 
+// ... City Generation ...
+
 function generateCity() {
     // Ground
     const groundGeo = new THREE.PlaneGeometry(CITY_SIZE + 400, CITY_SIZE + 400);
     groundGeo.rotateX(-Math.PI / 2);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x050510 }); // Dark background for gaps
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x050510 }); // Dark background
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.receiveShadow = true;
     ground.position.y = -0.1;
     scene.add(ground);
 
-    // Realistic Road Material (Asphalt)
+    // Realistic Road Material (Asphalt with Noise)
     const roadCanvas = document.createElement('canvas');
-    roadCanvas.width = 128; roadCanvas.height = 128;
+    roadCanvas.width = 512; roadCanvas.height = 512;
     const ctx = roadCanvas.getContext('2d');
+
+    // Base Asphalt
     ctx.fillStyle = '#222';
-    ctx.fillRect(0, 0, 128, 128);
-    // Add noise
-    for (let i = 0; i < 500; i++) {
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Noise
+    for (let i = 0; i < 5000; i++) {
         ctx.fillStyle = Math.random() > 0.5 ? '#2a2a2a' : '#1a1a1a';
-        ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+        const s = Math.random() * 2 + 1;
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
     }
+
+    // Grunge / Cracks (Simple lines)
+    ctx.strokeStyle = '#181818';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 20; i++) {
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * 512, Math.random() * 512);
+        ctx.lineTo(Math.random() * 512, Math.random() * 512);
+        ctx.stroke();
+    }
+
     const roadTex = new THREE.CanvasTexture(roadCanvas);
     roadTex.wrapS = THREE.RepeatWrapping;
     roadTex.wrapT = THREE.RepeatWrapping;
     roadTex.repeat.set(CITY_SIZE / 10, CITY_SIZE / 10);
-
     const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.9 });
-    const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x555555 }); // Darker sidewalk
-    const buildingColors = [0xeeeeee, 0xdddddd, 0xcccccc, 0xbbbbbb, 0x8899aa];
+
+    // Sidewalk / Curb Material
+    const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.8 });
 
     const halfCity = CITY_SIZE / 2;
 
-    // Road Base
+    // Base Road Layer
     const roadBase = new THREE.Mesh(
         new THREE.PlaneGeometry(CITY_SIZE, CITY_SIZE).rotateX(-Math.PI / 2),
         roadMat
@@ -500,72 +664,123 @@ function generateCity() {
     roadBase.receiveShadow = true;
     scene.add(roadBase);
 
-    // Grid Generation with Zones
+    // Geometry Reuse
+    const curbGeoH = new THREE.BoxGeometry(BLOCK_SIZE, 0.15, 0.5); // Along X
+    const curbGeoV = new THREE.BoxGeometry(0.5, 0.15, BLOCK_SIZE); // Along Z
+
+    // Grid Generation
     for (let x = -halfCity; x < halfCity; x += UNIT_SIZE) {
-        // Track Road Lines (Center of the gap)
-        ROADS.x.push(x - ROAD_WIDTH / 2);
+        ROADS.x.push(x - ROAD_WIDTH / 2); // Center of vertical road
 
         for (let z = -halfCity; z < halfCity; z += UNIT_SIZE) {
-            if (x === -halfCity) ROADS.z.push(z - ROAD_WIDTH / 2);
+            if (x === -halfCity) ROADS.z.push(z - ROAD_WIDTH / 2); // Center of horizontal road
 
-            // Coordinates for Building Block Center
+            // Block Center
             const bx = x + BLOCK_SIZE / 2;
             const bz = z + BLOCK_SIZE / 2;
 
-            // Streetlights at intersections (offset to corners)
+            // Streetlights
             if (Math.random() > 0.6) createStreetLight(x - 5, z - 5);
+
+            // Add Curbs around the block
+            // North
+            const cN = new THREE.Mesh(curbGeoH, sidewalkMat);
+            cN.position.set(bx, 0.075, z + BLOCK_SIZE);
+            scene.add(cN);
+            // South
+            const cS = new THREE.Mesh(curbGeoH, sidewalkMat);
+            cS.position.set(bx, 0.075, z);
+            scene.add(cS);
+            // East
+            const cE = new THREE.Mesh(curbGeoV, sidewalkMat);
+            cE.position.set(x + BLOCK_SIZE, 0.075, bz);
+            scene.add(cE);
+            // West
+            const cW = new THREE.Mesh(curbGeoV, sidewalkMat);
+            cW.position.set(x, 0.075, bz);
+            scene.add(cW);
 
             // ZONES
             const distFromCenter = Math.sqrt(bx * bx + bz * bz);
 
-            // 1. Central Park / Plaza (Safe Zone)
+            // 1. Park
             if (Math.abs(bx) < 40 && Math.abs(bz) < 40) {
-                if (Math.abs(bx) < 10 && Math.abs(bz) < 10) {
-                    // Spawn Point - Empty
-                } else {
+                if (Math.abs(bx) > 10 || Math.abs(bz) > 10) { // Keep 0,0 clear for spawn
                     createPark(bx, bz, BLOCK_SIZE);
                 }
                 continue;
             }
 
-            // 2. Downtown (Tall Glass Skyscrapers)
+            // 2. Downtown
             if (distFromCenter < 100 && (Math.abs(bx) < 40 || Math.abs(bz) < 40)) {
-                createSkyscraper(bx, bz, BLOCK_SIZE, sidewalkMat);
+                createSkyscraper(bx, bz, BLOCK_SIZE);
                 continue;
             }
 
-            // 3. Industrial (Warehouses)
+            // 3. Industrial
             if (bx > 50) {
-                createWarehouse(bx, bz, BLOCK_SIZE, sidewalkMat);
+                createWarehouse(bx, bz, BLOCK_SIZE);
                 continue;
             }
 
-            // 4. Residential (Smaller Buildings)
-            createResidential(bx, bz, BLOCK_SIZE, sidewalkMat);
+            // 4. Residential
+            createResidential(bx, bz, BLOCK_SIZE);
         }
     }
 
-    // Add Road Markings (Dashed Lines)
-    const lineGeo = new THREE.PlaneGeometry(0.5, 4);
-    lineGeo.rotateX(-Math.PI / 2);
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffaa }); // Yellow-ish
+    // Road Markings
+    addRoadMarkings(halfCity);
 
-    // Vertical Markings (along Z)
+    // Spawn Enemies
+    spawnTurrets(15);
+}
+
+function addRoadMarkings(halfCity) {
+    const dashedGeo = new THREE.PlaneGeometry(0.5, 4).rotateX(-Math.PI / 2);
+    const dashedMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    const crosswalkGeo = new THREE.PlaneGeometry(2, 6).rotateX(-Math.PI / 2);
+    const crosswalkMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    // Markings Loop
     ROADS.x.forEach(rx => {
-        for (let z = -halfCity; z < halfCity; z += 10) {
-            const line = new THREE.Mesh(lineGeo, lineMat);
+        // Vertical Dashed Lines
+        for (let z = -halfCity; z < halfCity; z += 12) {
+            const line = new THREE.Mesh(dashedGeo, dashedMat);
             line.position.set(rx, 0.03, z);
             scene.add(line);
         }
+
+        // Intersections with ROADS.z
+        ROADS.z.forEach(rz => {
+            // Crosswalks around intersection (rx, rz)
+            // 4 positions: rx +/- offset, rz +/- offset
+            // Just simple white blocks for now
+            const cw1 = new THREE.Mesh(crosswalkGeo, crosswalkMat);
+            cw1.position.set(rx - 6, 0.03, rz); // Left
+            scene.add(cw1);
+
+            const cw2 = new THREE.Mesh(crosswalkGeo, crosswalkMat);
+            cw2.position.set(rx + 6, 0.03, rz); // Right
+            scene.add(cw2);
+
+            const cw3 = new THREE.Mesh(crosswalkGeo, crosswalkMat);
+            cw3.rotation.y = Math.PI / 2;
+            cw3.position.set(rx, 0.03, rz - 6); // Top
+            scene.add(cw3);
+
+            const cw4 = new THREE.Mesh(crosswalkGeo, crosswalkMat);
+            cw4.rotation.y = Math.PI / 2;
+            cw4.position.set(rx, 0.03, rz + 6); // Bottom
+            scene.add(cw4);
+        });
     });
 
-    // Horizontal Markings (along X)
-    const lineGeoH = new THREE.PlaneGeometry(4, 0.5);
-    lineGeoH.rotateX(-Math.PI / 2);
-
+    // Horizontal Dashed Lines
+    const dashH = dashedGeo.clone();
+    dashH.rotateY(Math.PI / 2);
     ROADS.z.forEach(rz => {
-        for (let x = -halfCity; x < halfCity; x += 10) {
-            const line = new THREE.Mesh(lineGeoH, lineMat);
+        for (let x = -halfCity; x < halfCity; x += 12) {
+            const line = new THREE.Mesh(dashH, dashedMat);
             line.position.set(x, 0.03, rz);
             scene.add(line);
         }
@@ -584,108 +799,350 @@ function createStreetLight(x, z) {
     bulb.position.set(x, 7.5, z);
     scene.add(bulb);
 
-    // Add point light for realism (expensive, limit count?)
-    // const light = new THREE.PointLight(0xffaa00, 1, 15);
-    // light.position.set(x, 7.0, z);
-    // scene.add(light);
+    const light = new THREE.PointLight(0xffaa00, 1, 15);
+    light.position.set(x, 7.0, z);
+    scene.add(light);
 }
 
-// ... Building Types ...
+function createBuildingTexture(colorHue) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    // Wall Color
+    ctx.fillStyle = `hsl(${colorHue}, 20%, 30%)`;
+    ctx.fillRect(0, 0, 128, 256);
+
+    // Windows
+    const winW = 14;
+    const winH = 20;
+    const gapX = 10;
+    const gapY = 15;
+
+    ctx.fillStyle = '#111'; // Window Frame/Depth
+
+    for (let y = 10; y < 240; y += (winH + gapY)) {
+        for (let x = 10; x < 110; x += (winW + gapX)) {
+            // Frame
+            ctx.fillStyle = '#050510';
+            ctx.fillRect(x - 1, y - 1, winW + 2, winH + 2);
+
+            // Glass
+            if (Math.random() > 0.7) {
+                // Lit
+                ctx.fillStyle = `hsl(${40 + Math.random() * 10}, 80%, 60%)`;
+            } else {
+                // Dark Reflection
+                ctx.fillStyle = `hsl(${210}, 30%, ${10 + Math.random() * 10}%)`;
+            }
+            ctx.fillRect(x, y, winW, winH);
+        }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter; // Pixelated/Sharp look
+    return tex;
+}
+
+function createSkyscraper(x, z, size) {
+    const height = 40 + Math.random() * 60;
+    const geo = new THREE.BoxGeometry(size - 2, height, size - 2);
+
+    const tex = createBuildingTexture(200 + Math.random() * 40); // Blueish
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, height / 40);
+
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.2, metalness: 0.5 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, height / 2, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    collidables.push(new THREE.Box3().setFromObject(mesh));
+}
+
+function createWarehouse(x, z, size) {
+    const height = 10 + Math.random() * 5;
+    const geo = new THREE.BoxGeometry(size - 1, height, size - 1);
+    const tex = createBuildingTexture(0); // Red/Brownish logic could be added, passing Hue
+    // Override texture for warehouse to be more brick-like? Keep simple for now
+    const mat = new THREE.MeshStandardMaterial({ color: 0x887766, roughness: 0.9 });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, height / 2, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    collidables.push(new THREE.Box3().setFromObject(mesh));
+}
+
+function createResidential(x, z, size) {
+    const height = 8 + Math.random() * 12;
+    const geo = new THREE.BoxGeometry(size - 4, height, size - 4);
+
+    const hue = Math.random() * 360;
+    const tex = createBuildingTexture(hue);
+    tex.repeat.set(1, height / 30);
+
+    const mat = new THREE.MeshStandardMaterial({ map: tex });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, height / 2, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    collidables.push(new THREE.Box3().setFromObject(mesh));
+}
+
+function createTree(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    // Trunk
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.4, 1.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0x553311 })
+    );
+    trunk.position.y = 0.75;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    // Foliage levels
+    const gGreen = new THREE.MeshStandardMaterial({ color: 0x228833, flatShading: true });
+
+    const l1 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2, 8), gGreen);
+    l1.position.y = 2.0;
+    l1.castShadow = true;
+    group.add(l1);
+
+    const l2 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.8, 8), gGreen);
+    l2.position.y = 3.0;
+    l2.castShadow = true;
+    group.add(l2);
+
+    const l3 = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1.5, 8), gGreen);
+    l3.position.y = 4.0;
+    l3.castShadow = true;
+    group.add(l3);
+
+    scene.add(group);
+    collidables.push(new THREE.Box3().setFromObject(trunk)); // Collide with trunk
+}
+
 function createPark(x, z, size) {
+    // Grass Base
     const geo = new THREE.BoxGeometry(size, 0.2, size);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x22aa44 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x33aa44 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, 0.1, z);
     mesh.receiveShadow = true;
     scene.add(mesh);
 
-    for (let i = 0; i < 4; i++) {
+    // Add Trees
+    for (let i = 0; i < 5; i++) {
         const tx = x + (Math.random() - 0.5) * (size - 2);
         const tz = z + (Math.random() - 0.5) * (size - 2);
-
-        const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8),
-            new THREE.MeshStandardMaterial({ color: 0x553311 })
-        );
-        trunk.position.set(tx, 0.75, tz);
-        trunk.castShadow = true;
-        scene.add(trunk);
-
-        const crown = new THREE.Mesh(
-            new THREE.DodecahedronGeometry(1.5),
-            new THREE.MeshStandardMaterial({ color: 0x116622 })
-        );
-        crown.position.set(tx, 2.5, tz);
-        crown.castShadow = true;
-        scene.add(crown);
-        collidables.push(new THREE.Box3().setFromObject(trunk));
+        createTree(tx, tz);
     }
 }
 
-function createSkyscraper(x, z, size, swMat) {
-    const height = 30 + Math.random() * 50;
-    const geo = new THREE.BoxGeometry(size - 2, height, size - 2);
-    const tex = createBuildingTexture();
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1, height / 10);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.8, roughness: 0.1 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, height / 2, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    collidables.push(new THREE.Box3().setFromObject(mesh));
+function spawnTurrets(count) {
+    const geo = new THREE.SphereGeometry(0.5);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0x550000 });
+    const baseGeo = new THREE.CylinderGeometry(0.4, 0.6, 1);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+    for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * CITY_SIZE;
+        const z = (Math.random() - 0.5) * CITY_SIZE;
+
+        // Avoid spawn center
+        if (Math.abs(x) < 20 && Math.abs(z) < 20) continue;
+
+        const group = new THREE.Group();
+        group.position.set(x, 0.5, z);
+
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        group.add(base);
+
+        const head = new THREE.Mesh(geo, mat.clone());
+        head.position.y = 0.8;
+        head.userData = { type: 'turret', hp: 20 }; // Hp logic
+        group.add(head);
+
+        scene.add(group);
+
+        turrets.push({
+            group: group,
+            head: head,
+            lastFire: 0,
+            active: true
+        });
+
+        // Add to collidables? Maybe base
+        collidables.push(new THREE.Box3().setFromObject(base));
+    }
 }
 
-function createWarehouse(x, z, size, swMat) {
-    const height = 8 + Math.random() * 5;
-    const geo = new THREE.BoxGeometry(size - 1, height, size - 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.7 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, height / 2, z);
-    mesh.castShadow = true;
-    scene.add(mesh);
-    collidables.push(new THREE.Box3().setFromObject(mesh));
-}
+function updateTurrets(time) {
+    if (!player) return;
+    const pPos = player.mesh.position;
 
-function createResidential(x, z, size, swMat) {
-    const height = 5 + Math.random() * 10;
-    const geo = new THREE.BoxGeometry(size - 4, height, size - 4);
-    const mat = new THREE.MeshStandardMaterial({ color: `hsl(${Math.random() * 360}, 30%, 60%)` });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, height / 2, z);
-    mesh.castShadow = true;
-    scene.add(mesh);
-    collidables.push(new THREE.Box3().setFromObject(mesh));
-}
+    turrets.forEach(t => {
+        if (!t.active) return;
+        if (!t.group) return;
 
-function createBuildingTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
+        const dist = t.group.position.distanceTo(pPos);
+        if (dist < 60) { // Increased Range
+            // Rotate ENTIRE enemy to face player
+            t.group.lookAt(pPos.x, t.group.position.y, pPos.z);
+            // We only rotate Y mostly, but lookAt handles it. 
+            // For full body rotation towards player on ground plane:
+            // t.group.lookAt(pPos.x, t.group.position.y, pPos.z);
 
-    // Background - Glassy
-    ctx.fillStyle = '#223355';
-    ctx.fillRect(0, 0, 128, 256);
+            // Fire
+            if (time - t.lastFire > 1500) { // Faster fire rate
+                // Get Gun World Position
+                const gunWorldPos = new THREE.Vector3();
+                if (t.gun) {
+                    t.gun.getWorldPosition(gunWorldPos);
+                } else {
+                    // Fallback for old turrets or errors
+                    gunWorldPos.copy(t.group.position).add(new THREE.Vector3(0, 1.5, 0));
+                }
 
-    // Windows Lit/Unlit
-    for (let y = 10; y < 256; y += 20) {
-        for (let x = 10; x < 128; x += 20) {
-            if (Math.random() > 0.4) {
-                // Lit Window
-                ctx.fillStyle = `hsl(${40 + Math.random() * 20}, 100%, 70%)`; // Yellow/Warm
-            } else {
-                ctx.fillStyle = '#112244'; // Dark
+                // LOS Check from Gun
+                if (checkTurretLOS(gunWorldPos, pPos)) {
+                    t.lastFire = time;
+                    fireTurretProjectile(gunWorldPos, pPos);
+                }
             }
-            ctx.fillRect(x, y, 10, 15);
         }
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    return texture;
+    });
 }
+
+function checkTurretLOS(start, targetPos) {
+    const targetCenter = targetPos.clone().add(new THREE.Vector3(0, 1.5, 0));
+    const dir = new THREE.Vector3().subVectors(targetCenter, start).normalize();
+    const ray = new THREE.Raycaster(start, dir, 0, 45);
+
+    const intersects = ray.intersectObjects(scene.children, true);
+
+    for (const hit of intersects) {
+        if (hit.distance < 1) continue;
+
+        let isTurret = false;
+        let p = hit.object;
+        while (p) {
+            if (p.userData && p.userData.type === 'turret') { isTurret = true; break; }
+            p = p.parent;
+        }
+        if (isTurret) continue;
+
+        let isPlayer = false;
+        p = hit.object;
+        while (p) {
+            if (p === player.mesh) { isPlayer = true; break; }
+            p = p.parent;
+        }
+
+        if (isPlayer) return true;
+        return false;
+    }
+    return false;
+}
+
+function fireTurretProjectile(start, target) {
+    const geo = new THREE.SphereGeometry(0.2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(start);
+    scene.add(mesh);
+
+    // Direction
+    const dir = new THREE.Vector3().subVectors(target, start).normalize();
+
+    // Animate Projectile
+    const speed = 15;
+    const startTime = performance.now();
+
+    function animateProjectile() {
+        const now = performance.now();
+        const dt = (now - startTime) / 1000;
+
+        mesh.position.addScaledVector(dir, speed * 0.016); // Approx delta
+
+        // Check Collision with Player
+        if (player && mesh.position.distanceTo(player.mesh.position) < 1.0) {
+            damagePlayer(15); // Turret Damage
+            scene.remove(mesh);
+            return;
+        }
+
+        // Remove after 3s
+        if (dt > 3) {
+            scene.remove(mesh);
+            return;
+        }
+
+        if (scene.children.includes(mesh)) requestAnimationFrame(animateProjectile);
+    }
+    animateProjectile();
+}
+
+function damagePlayer(amount) {
+    if (!isGameActive) return; // Invincible when modal is open (game inactive)
+
+    playerHP -= amount;
+    // Update UI
+    const bar = document.getElementById('health-bar');
+    const text = document.getElementById('health-text');
+    if (bar) bar.style.width = `${Math.max(0, playerHP)}%`;
+    if (text) text.innerText = `${Math.max(0, playerHP)} / 100`;
+
+    if (playerHP <= 0) {
+        // Respawn
+        playerHP = 100;
+
+        // Random Respawn
+        const range = CITY_SIZE / 2 - 20;
+        const sx = (Math.random() - 0.5) * range;
+        const sz = (Math.random() - 0.5) * range;
+        player.mesh.position.set(sx, 0.5, sz);
+
+        if (bar) bar.style.width = '100%';
+        if (text) text.innerText = '100 / 100';
+
+        alert("YOU DIED! -5 Points. Respawning...");
+
+        // Emit Death
+        if (socket) socket.emit('playerDeath');
+    }
+}
+
+function destroyTurret(mesh) {
+    // mesh is the head, group, or a child part
+
+    const turret = turrets.find(t => t.group === mesh || t.group.children.includes(mesh) || t.head === mesh || t.gun === mesh);
+
+    if (turret && turret.active) {
+        turret.active = false;
+
+        // Remove from array
+        const idx = turrets.indexOf(turret);
+        if (idx > -1) turrets.splice(idx, 1);
+
+        // Scoring
+        if (socket) socket.emit('enemyKill');
+
+        // Explosion Effect (Simple)
+        gsap.to(turret.group.scale, {
+            x: 0, y: 0, z: 0, duration: 0.5, onComplete: () => {
+                scene.remove(turret.group);
+            }
+        });
+    }
+}
+
+
 
 function openModal(data) {
     if (!isGameActive) return;
@@ -987,17 +1444,21 @@ function setupSocket(token) {
                     closeModal();
                 }
             });
+            if (result.newScore !== undefined) {
+                scoreEl.innerText = result.newScore;
+            }
         } else {
             const modalContent = document.querySelector('.modal-content');
             gsap.fromTo(modalContent, { x: -10 }, { x: 10, duration: 0.05, repeat: 5, yoyo: true, clearProps: "x" });
-            document.getElementById('q-feedback').innerText = "ACCESS DENIED";
+            document.getElementById('q-feedback').innerText = result.message || "ACCESS DENIED";
             setTimeout(() => document.getElementById('q-feedback').innerText = "", 2000);
         }
     });
 
     // START Auth Handlers
     socket.on('teamJoined', (data) => {
-        // data: { code, teamName, isLeader }
+        // data: { code, teamName, isLeader, score }
+        console.log("Team Joined Data:", data);
         isAuthenticated = true;
 
         // Hide Login, Show HUD
@@ -1006,6 +1467,7 @@ function setupSocket(token) {
 
         document.getElementById('hud-team-name').innerText = `TEAM: ${data.teamName.toUpperCase()}`;
         document.getElementById('hud-team-code').innerText = `CODE: ${data.code}`;
+        scoreEl.innerText = data.score || 0; // Update local score immediately
 
         // Request Game State
         socket.emit('requestGameState');
@@ -1031,6 +1493,12 @@ function setupSocket(token) {
         if (myTeamName) {
             const myTeam = rankings.find(r => r.name.toUpperCase() === myTeamName);
             if (myTeam) scoreEl.innerText = myTeam.score;
+        }
+    });
+
+    socket.on('scoreUpdate', (data) => {
+        if (data.score !== undefined) {
+            scoreEl.innerText = data.score;
         }
     });
 
