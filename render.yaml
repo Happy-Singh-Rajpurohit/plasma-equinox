@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: plasma-equinox
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
