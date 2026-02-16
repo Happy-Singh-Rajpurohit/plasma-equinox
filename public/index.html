@@ -104,11 +104,29 @@
             </div>
         </div>
 
-        <!-- In-Game HUD (Hidden initially) -->
+        <!-- Top Right Leaderboard -->
+        <div id="leaderboard-panel" class="panel">
+            <div id="lb-header">
+                <span>LEADERBOARD</span>
+                <button id="btn-toggle-lb">▼</button>
+            </div>
+            <div id="lb-content">
+                <ul id="leaderboard-list">
+                    <!-- Items populated by JS -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- Instructions Mini -->
+        <div id="instructions-mini">
+            WASD to Move | MOUSE to Look | CLICK to Shoot | E to Interact
+        </div>
+
+        <!-- HUD (Crosshair, Score, Health) -->
         <div id="game-hud" class="hidden">
-            <div id="team-info" class="panel glass-mini">
-                <h3 id="hud-team-name">TEAM: ---</h3>
-                <h2 id="hud-team-code">CODE: ---</h2>
+            <div id="team-info">
+                <h2 id="hud-team-name">TEAM ALPHA</h2>
+                <p id="hud-code">CODE: X7219A</p>
             </div>
 
             <div id="health-container">
@@ -116,36 +134,26 @@
                 <div id="health-text">100 / 100</div>
             </div>
 
-            <div id="leaderboard" class="panel glass-mini">
-                <h3>TOP TEAMS</h3>
-                <ul id="leaderboard-list">
-                    <!-- <li><span>Team A</span> <span>1200</span></li> -->
-                </ul>
-            </div>
-
             <div id="score-board">
-                TEAM SCORE: <span id="team-score">0</span>
-            </div>
-
-            <div id="crosshair">+</div>
-
-            <div id="instructions-mini">
-                WASD to Move | E to Interact
+                SCORE <span id="team-score">0</span>
             </div>
         </div>
 
-        <!-- Question Modal -->
-        <div id="question-modal" class="hidden">
-            <div class="modal-content glass">
-                <h2 id="q-text">DECRYPTING...</h2>
-                <input type="text" id="q-answer" placeholder="ENTER KEY...">
-                <div class="modal-actions">
-                    <button id="q-submit" class="cyber-btn">TRANSMIT</button>
-                    <button id="q-cancel" class="cyber-btn red">ABORT</button>
-                </div>
-                <p id="q-feedback"></p>
+        <div id="crosshair">+</div>
+    </div>
+
+    <!-- Question Modal -->
+    <div id="question-modal" class="hidden">
+        <div class="modal-content glass">
+            <h2 id="q-text">DECRYPTING...</h2>
+            <input type="text" id="q-answer" placeholder="ENTER KEY...">
+            <div class="modal-actions">
+                <button id="q-submit" class="cyber-btn">TRANSMIT</button>
+                <button id="q-cancel" class="cyber-btn red">ABORT</button>
             </div>
+            <p id="q-feedback"></p>
         </div>
+    </div>
 
     </div>
 

@@ -6,6 +6,7 @@ import { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, u
 const PLAYER_SPEED = 15.0;
 const CITY_SIZE = 220;
 const BLOCK_SIZE = 20;
+const SPAWN_POS = { x: -10, y: 2, z: -10 };
 
 // Globals
 // Globals
@@ -127,7 +128,8 @@ function init() {
 
 
     // 11. UI
-    setupUI(); // New Logic
+    setupUI();
+    setupLeaderboardUI(); // New Toggle Logic
 
     // 12. Cars - REMOVED
 
@@ -144,13 +146,27 @@ async function fetchLeaderboard() {
         const list = document.getElementById('public-leaderboard-list');
         if (list) {
             list.innerHTML = data.map((t, i) => `
-                <li style="display: flex; justify-content: space-between; margin-bottom: 4px; color: ${i === 0 ? '#ffd700' : '#fff'}">
+                <li style="color: ${i === 0 ? '#ffd700' : '#fff'}">
                     <span>${i + 1}. ${t.name.toUpperCase()}</span>
-                    <span>${t.score} PTS</span>
+                    <span>${t.score}</span>
                 </li>
             `).join('');
         }
     } catch (e) { console.error("Leaderboard fetch failed", e); }
+}
+
+function setupLeaderboardUI() {
+    const btn = document.getElementById('btn-toggle-lb');
+    const content = document.getElementById('lb-content');
+
+    if (btn && content) {
+        btn.addEventListener('click', () => {
+            content.classList.toggle('hidden');
+            btn.classList.toggle('collapsed');
+            // Change arrow direction
+            btn.innerText = content.classList.contains('hidden') ? '◀' : '▼';
+        });
+    }
 }
 
 
@@ -299,6 +315,9 @@ function createPlayer() {
     spotLight.castShadow = true;
     group.add(spotLight);
     group.add(spotLight.target);
+
+    // Initial Position
+    group.position.set(SPAWN_POS.x, SPAWN_POS.y, SPAWN_POS.z);
 }
 
 function setupInput() {
@@ -495,9 +514,9 @@ function updatePlayer(delta) {
 
     // Emit Position for Teammates
     const now = performance.now();
-    if (now - lastPosEmit > 100) { // 10Hz
-        lastPosEmit = now;
-        if (socket && isAuthenticated) {
+    // Network Sync (Throttled to ~30Hz)
+    if (isAuthenticated && (!player.lastUpdate || now - player.lastUpdate > 30)) {
+        if (socket) {
             socket.emit('playerMove', {
                 x: player.mesh.position.x,
                 y: player.mesh.position.y,
@@ -505,6 +524,7 @@ function updatePlayer(delta) {
                 rot: player.mesh.rotation.y
             });
         }
+        player.lastUpdate = now;
     }
 
     if (moveDir.lengthSq() > 0) {
@@ -605,6 +625,7 @@ function tryInteract() {
 const ROAD_WIDTH = 10;
 const UNIT_SIZE = BLOCK_SIZE + ROAD_WIDTH;
 const ROADS = { x: [], z: [] }; // Store road coordinates
+const validSpawnPoints = []; // Valid locations for enemies (roads, parks)
 
 // ... City Generation ...
 
@@ -672,8 +693,19 @@ function generateCity() {
     for (let x = -halfCity; x < halfCity; x += UNIT_SIZE) {
         ROADS.x.push(x - ROAD_WIDTH / 2); // Center of vertical road
 
+        // Add Road Vertical segments to valid spawns
+        for (let z = -halfCity; z < halfCity; z += 20) {
+            validSpawnPoints.push({ x: x - ROAD_WIDTH / 2, z: z });
+        }
+
         for (let z = -halfCity; z < halfCity; z += UNIT_SIZE) {
-            if (x === -halfCity) ROADS.z.push(z - ROAD_WIDTH / 2); // Center of horizontal road
+            if (x === -halfCity) {
+                ROADS.z.push(z - ROAD_WIDTH / 2); // Center of horizontal road
+                // Add Road Horizontal segments
+                for (let xx = -halfCity; xx < halfCity; xx += 20) {
+                    validSpawnPoints.push({ x: xx, z: z - ROAD_WIDTH / 2 });
+                }
+            }
 
             // Block Center
             const bx = x + BLOCK_SIZE / 2;
@@ -707,6 +739,11 @@ function generateCity() {
             if (Math.abs(bx) < 40 && Math.abs(bz) < 40) {
                 if (Math.abs(bx) > 10 || Math.abs(bz) > 10) { // Keep 0,0 clear for spawn
                     createPark(bx, bz, BLOCK_SIZE);
+                    // Add Park center to valid spawns
+                    validSpawnPoints.push({ x: bx, z: bz });
+                } else {
+                    // Center Block: Spawn Platform
+                    createSpawnPlatform(bx, bz, BLOCK_SIZE);
                 }
                 continue;
             }
@@ -732,7 +769,7 @@ function generateCity() {
     addRoadMarkings(halfCity);
 
     // Spawn Enemies
-    spawnTurrets(15);
+    spawnTurrets(25);
 }
 
 function addRoadMarkings(halfCity) {
@@ -944,6 +981,94 @@ function createPark(x, z, size) {
     }
 }
 
+function createSpawnPlatform(x, z, size) {
+    // A techy looking platform
+    const geo = new THREE.BoxGeometry(size - 2, 0.5, size - 2);
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        roughness: 0.2,
+        metalness: 0.8,
+        emissive: 0x001133,
+        emissiveIntensity: 0.2
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.25, z);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    // Glowing Ring
+    const ringGeo = new THREE.TorusGeometry(3, 0.1, 8, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(x, 0.6, z);
+    scene.add(ring);
+
+    // Add to collidables so we don't fall through? 
+    // It's low enough (0.5 height, so top is 0.5). 
+    // Player spawn y=2 should fall onto it.
+    // If not in collidables, checkCollision might ignore it, but we rely on y > 0 for ground.
+    // Let's rely on ground plane for now, unless we want to stand ON the platform.
+    // If we want to stand on it, we must add to collidables or handle Y collision.
+    // The current updatePlayer handles y < 0. 
+    // If platform is at y=0.5, we want to walk on it?
+    // Current loop only does box collision (blocking). It doesn't do Y-gravity collision (standing on top).
+    // So for now, let's keep it decorative or low enough not to matter, OR make it a blocking box if it was a wall.
+    // It is a floor. So standard gravity logic (y < 0) applies to ground. 
+    // To stand on this platform, we'd need raycasting for ground check.
+    // simpler: just let it be a floor decoration slightly above ground, player clips slightly or we adjust ground check.
+    // Changing ground check is risky. Let's make it 0.1 high.
+    mesh.scale.y = 0.2;
+    mesh.position.y = 0.1;
+    // Ring slightly higher
+    ring.position.y = 0.2;
+}
+
+function getValidSpawnLocation() {
+    // Try up to 50 times to find a spot not too close to other turrets (Increased for 100+ players)
+    for (let i = 0; i < 50; i++) {
+        let pt;
+        if (validSpawnPoints.length > 0) {
+            pt = validSpawnPoints[Math.floor(Math.random() * validSpawnPoints.length)];
+        } else {
+            // Fallback
+            pt = { x: (Math.random() - 0.5) * CITY_SIZE, z: (Math.random() - 0.5) * CITY_SIZE };
+        }
+
+        // Add small offset
+        const x = pt.x + (Math.random() - 0.5) * 4;
+        const z = pt.z + (Math.random() - 0.5) * 4;
+
+        // Check density/crowding
+        let tooClose = false;
+        // Avoid center spawn area
+        if (Math.abs(x) < 30 && Math.abs(z) < 30) tooClose = true;
+
+        if (!tooClose) {
+            for (const t of turrets) {
+                if (t.active && t.group) {
+                    const dist = Math.sqrt(Math.pow(t.group.position.x - x, 2) + Math.pow(t.group.position.z - z, 2));
+                    if (dist < 40) { // Min separation distance
+                        tooClose = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!tooClose) {
+            return { x, y: 0.5, z };
+        }
+    }
+
+    // Fallback if super crowded: just pick random valid
+    if (validSpawnPoints.length > 0) {
+        const pt = validSpawnPoints[Math.floor(Math.random() * validSpawnPoints.length)];
+        return { x: pt.x, y: 0.5, z: pt.z };
+    }
+    return { x: 50, y: 0.5, z: 50 };
+}
+
 function spawnTurrets(count) {
     const geo = new THREE.SphereGeometry(0.5);
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0x550000 });
@@ -951,14 +1076,10 @@ function spawnTurrets(count) {
     const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
 
     for (let i = 0; i < count; i++) {
-        const x = (Math.random() - 0.5) * CITY_SIZE;
-        const z = (Math.random() - 0.5) * CITY_SIZE;
-
-        // Avoid spawn center
-        if (Math.abs(x) < 20 && Math.abs(z) < 20) continue;
+        const pos = getValidSpawnLocation();
 
         const group = new THREE.Group();
-        group.position.set(x, 0.5, z);
+        group.position.set(pos.x, pos.y, pos.z);
 
         const base = new THREE.Mesh(baseGeo, baseMat);
         group.add(base);
@@ -991,7 +1112,7 @@ function updateTurrets(time) {
         if (!t.group) return;
 
         const dist = t.group.position.distanceTo(pPos);
-        if (dist < 60) { // Increased Range
+        if (dist < 120) { // Increased Range (was 60)
             // Rotate ENTIRE enemy to face player
             t.group.lookAt(pPos.x, t.group.position.y, pPos.z);
             // We only rotate Y mostly, but lookAt handles it. 
@@ -999,7 +1120,7 @@ function updateTurrets(time) {
             // t.group.lookAt(pPos.x, t.group.position.y, pPos.z);
 
             // Fire
-            if (time - t.lastFire > 1500) { // Faster fire rate
+            if (time - t.lastFire > 800 + Math.random() * 400) { // Faster fire rate: ~1s
                 // Get Gun World Position
                 const gunWorldPos = new THREE.Vector3();
                 if (t.gun) {
@@ -1022,32 +1143,36 @@ function updateTurrets(time) {
 function checkTurretLOS(start, targetPos) {
     const targetCenter = targetPos.clone().add(new THREE.Vector3(0, 1.5, 0));
     const dir = new THREE.Vector3().subVectors(targetCenter, start).normalize();
-    const ray = new THREE.Raycaster(start, dir, 0, 45);
+    const dist = start.distanceTo(targetCenter);
+    const ray = new THREE.Raycaster(start, dir, 0, dist); // Check UP TO the player
 
     const intersects = ray.intersectObjects(scene.children, true);
 
     for (const hit of intersects) {
-        if (hit.distance < 1) continue;
+        if (hit.distance < 1) continue; // Ignore self/close artifacts
 
-        let isTurret = false;
-        let p = hit.object;
-        while (p) {
-            if (p.userData && p.userData.type === 'turret') { isTurret = true; break; }
-            p = p.parent;
-        }
-        if (isTurret) continue;
-
+        // Check what we hit
+        let obj = hit.object;
         let isPlayer = false;
-        p = hit.object;
-        while (p) {
-            if (p === player.mesh) { isPlayer = true; break; }
-            p = p.parent;
+        let isTurret = false;
+        let isBuilding = true; // Assume building unless proven otherwise
+
+        // Traverse up to find root or identify type
+        while (obj) {
+            if (obj === player.mesh) { isPlayer = true; isBuilding = false; break; }
+            if (obj.userData && obj.userData.type === 'turret') { isTurret = true; isBuilding = false; break; }
+            if (obj.userData && obj.userData.type === 'projectile') { isBuilding = false; break; } // Ignore projectiles
+            obj = obj.parent;
         }
 
-        if (isPlayer) return true;
-        return false;
+        if (isTurret) continue; // Ignore other turrets/self
+
+        if (isPlayer) return true; // Found player!
+
+        // If we hit something else (building, ground, obstacle) BEFORE player, LOS is blocked
+        if (isBuilding) return false;
     }
-    return false;
+    return false; // Should have hit player but didn't?
 }
 
 function fireTurretProjectile(start, target) {
@@ -1055,6 +1180,7 @@ function fireTurretProjectile(start, target) {
     const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(start);
+    mesh.userData = { type: 'projectile' }; // Tag for LOS ignoring
     scene.add(mesh);
 
     // Direction
@@ -1063,22 +1189,74 @@ function fireTurretProjectile(start, target) {
     // Animate Projectile
     const speed = 15;
     const startTime = performance.now();
+    const currentDir = dir.clone(); // Mutable direction for homing
+    let currentPos = mesh.position.clone();
 
     function animateProjectile() {
         const now = performance.now();
         const dt = (now - startTime) / 1000;
+        const delta = speed * 0.016; // approx movement this frame
 
-        mesh.position.addScaledVector(dir, speed * 0.016); // Approx delta
+        // Homing Logic
+        if (player && player.mesh) {
+            const targetPos = player.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)); // Aim for center
+            const desiredDir = new THREE.Vector3().subVectors(targetPos, mesh.position).normalize();
 
-        // Check Collision with Player
-        if (player && mesh.position.distanceTo(player.mesh.position) < 1.0) {
-            damagePlayer(15); // Turret Damage
-            scene.remove(mesh);
-            return;
+            // Steer towards target (lerp)
+            currentDir.lerp(desiredDir, 0.08); // Increased homing strength (was 0.05)
+            currentDir.normalize();
         }
 
-        // Remove after 3s
-        if (dt > 3) {
+        // Calculate Next Position
+        const nextPos = currentPos.clone().addScaledVector(currentDir, delta);
+
+        // Swept Collision (Raycast from current to next)
+        const moveVec = new THREE.Vector3().subVectors(nextPos, currentPos);
+        const dist = moveVec.length();
+
+        if (dist > 0) {
+            const ray = new THREE.Raycaster(currentPos, moveVec.clone().normalize(), 0, dist + 0.5); // +0.5 buffer
+            // Check collision with EVERYTHING (player + environment)
+            const hits = ray.intersectObjects(scene.children, true);
+
+            for (const hit of hits) {
+                // Ignore the projectile itself (if somehow included) or very close start artifacts
+                if (hit.object === mesh) continue;
+                if (hit.distance < 0.1) continue;
+
+                // Check what we hit
+                let obj = hit.object;
+                let isPlayer = false;
+                let isTurret = false;
+
+                while (obj) {
+                    if (obj === player.mesh) { isPlayer = true; break; }
+                    if (obj.userData && obj.userData.type === 'turret') { isTurret = true; break; }
+                    obj = obj.parent;
+                }
+
+                if (isTurret) continue; // Pass through turrets? Or explode? Let's pass through for now to avoid self-hit.
+
+                if (isPlayer) {
+                    damagePlayer(15);
+                    scene.remove(mesh);
+                    return; // Done
+                }
+
+                // If it's not player and not turret, it's a wall/ground
+                // PROJECTILE TERMINATED
+                // Optional: impact effect
+                scene.remove(mesh);
+                return;
+            }
+        }
+
+        // Update Position
+        currentPos.copy(nextPos);
+        mesh.position.copy(currentPos);
+
+        // Remove after 6s (increased for 120 range)
+        if (dt > 6) {
             scene.remove(mesh);
             return;
         }
@@ -1103,19 +1281,37 @@ function damagePlayer(amount) {
         playerHP = 100;
 
         // Random Respawn
-        const range = CITY_SIZE / 2 - 20;
-        const sx = (Math.random() - 0.5) * range;
-        const sz = (Math.random() - 0.5) * range;
-        player.mesh.position.set(sx, 0.5, sz);
+        const pos = getValidSpawnLocation();
+        player.mesh.position.set(pos.x, 0.5, pos.z);
 
         if (bar) bar.style.width = '100%';
         if (text) text.innerText = '100 / 100';
 
-        alert("YOU DIED! -5 Points. Respawning...");
+        // Custom UI Message
+        showToast("YOU DIED! -5 PTS", "#ff0000");
 
         // Emit Death
         if (socket) socket.emit('playerDeath');
     }
+}
+
+function showToast(msg, color) {
+    const toast = document.createElement('div');
+    toast.style.position = 'absolute';
+    toast.style.top = '20%';
+    toast.style.left = '50%';
+    toast.style.transform = 'translate(-50%, -50%)';
+    toast.style.color = color || '#fff';
+    toast.style.fontSize = '2rem';
+    toast.style.fontWeight = 'bold';
+    toast.style.textShadow = '0 0 10px #000';
+    toast.style.pointerEvents = 'none';
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+
+    // Anim
+    gsap.fromTo(toast, { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.5 });
+    gsap.to(toast, { opacity: 0, delay: 2, duration: 1, onComplete: () => toast.remove() });
 }
 
 function destroyTurret(mesh) {
@@ -1124,22 +1320,45 @@ function destroyTurret(mesh) {
     const turret = turrets.find(t => t.group === mesh || t.group.children.includes(mesh) || t.head === mesh || t.gun === mesh);
 
     if (turret && turret.active) {
-        turret.active = false;
-
-        // Remove from array
-        const idx = turrets.indexOf(turret);
-        if (idx > -1) turrets.splice(idx, 1);
+        turret.active = false; // Mark inactive so it stops firing
 
         // Scoring
         if (socket) socket.emit('enemyKill');
+        showToast("ENEMY DESTROYED +5 PTS", "#00ff00");
 
-        // Explosion Effect (Simple)
-        gsap.to(turret.group.scale, {
-            x: 0, y: 0, z: 0, duration: 0.5, onComplete: () => {
-                scene.remove(turret.group);
-            }
-        });
+        // Disable visuals
+        turret.group.visible = false;
+
+        // Remove collision? 
+        // Ideally yes, but simpler to keep checking 'active' in loops.
+        // If we want to remove collision, we need to track the Box3 in collidables.
+        // For now, let's just hide it. The projectile hits mesh, if mesh is hidden/removed?
+        // Raycaster hits visible objects usually. 
+        // box3 in collidables is separate. Usually we just leave it or rebuild list.
+        // Let's leave collision for dead turret base to avoid complex management, or move it.
+
+        // Respawn Timer: 60 - 120 seconds
+        setTimeout(() => {
+            respawnTurret(turret);
+        }, 60000 + Math.random() * 60000);
     }
+}
+
+function respawnTurret(turret) {
+    if (!turret) return;
+
+    // Relocate!
+    const newPos = getValidSpawnLocation();
+    turret.group.position.set(newPos.x, newPos.y, newPos.z);
+
+    turret.active = true;
+    turret.group.visible = true;
+    turret.group.scale.set(1, 1, 1); // Reset scale from explosion
+    // Heal?
+    if (turret.head.userData) turret.head.userData.hp = 20;
+
+    // Appear effect
+    gsap.fromTo(turret.group.scale, { x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1, duration: 0.5 });
 }
 
 
@@ -1462,12 +1681,14 @@ function setupSocket(token) {
         isAuthenticated = true;
 
         // Hide Login, Show HUD
-        loginScreen.classList.add('hidden');
-        gameHud.classList.remove('hidden');
+        if (loginScreen) loginScreen.classList.add('hidden');
+        if (gameHud) gameHud.classList.remove('hidden');
 
-        document.getElementById('hud-team-name').innerText = `TEAM: ${data.teamName.toUpperCase()}`;
-        document.getElementById('hud-team-code').innerText = `CODE: ${data.code}`;
-        scoreEl.innerText = data.score || 0; // Update local score immediately
+        const tName = document.getElementById('hud-team-name');
+        const tCode = document.getElementById('hud-team-code');
+        if (tName) tName.innerText = `TEAM: ${data.teamName.toUpperCase()}`;
+        if (tCode) tCode.innerText = `CODE: ${data.code}`;
+        if (scoreEl) scoreEl.innerText = data.score || 0;
 
         // Request Game State
         socket.emit('requestGameState');
@@ -1479,20 +1700,23 @@ function setupSocket(token) {
     socket.on('leaderboardUpdate', (rankings) => {
         // rankings: [{name, score}, ...]
         const list = document.getElementById('leaderboard-list');
-        list.innerHTML = '';
-        rankings.forEach(r => {
-            const li = document.createElement('li');
-            li.innerHTML = `<span>${r.name}</span> <span style="color:var(--neon-cyan)">${r.score}</span>`;
-            list.appendChild(li);
-        });
+        if (list) {
+            list.innerHTML = '';
+            rankings.forEach(r => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${r.name}</span> <span style="color:var(--neon-cyan)">${r.score}</span>`;
+                list.appendChild(li);
+            });
+        }
 
-        // Also update my team score if possible (need to know my team name or receive it separately)
-        // For simplicity, we just rely on leaderboard for now, or finding ourselves in it.
-        // Or we could store our team name locally.
-        const myTeamName = document.getElementById('hud-team-name').innerText.split(': ')[1];
-        if (myTeamName) {
-            const myTeam = rankings.find(r => r.name.toUpperCase() === myTeamName);
-            if (myTeam) scoreEl.innerText = myTeam.score;
+        // Also update my team score if possible
+        const tNameEl = document.getElementById('hud-team-name');
+        if (tNameEl) {
+            const myTeamName = tNameEl.innerText.split(': ')[1];
+            if (myTeamName) {
+                const myTeam = rankings.find(r => r.name.toUpperCase() === myTeamName);
+                if (myTeam && scoreEl) scoreEl.innerText = myTeam.score;
+            }
         }
     });
 

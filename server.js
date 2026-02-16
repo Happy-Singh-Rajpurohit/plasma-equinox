@@ -163,6 +163,13 @@ io.on('connection', async (socket) => {
     // 1. Team Management
     socket.on('createTeam', async ({ playerName, teamName }) => {
         try {
+            // Check for duplicate name (Case insensitive)
+            const exists = Array.from(TEAMS.values()).some(t => t.name.toLowerCase() === teamName.toLowerCase());
+            if (exists) {
+                socket.emit('error', { message: "Team Name Already Taken" });
+                return;
+            }
+
             const code = generateCode();
             const newTeam = {
                 code: code,
@@ -381,6 +388,54 @@ io.on('connection', async (socket) => {
                 } else {
                     socket.emit('answerResult', { correct: false });
                 }
+            }
+        }
+    });
+
+    // 4. Combat Scoring
+    socket.on('enemyKill', async () => {
+        const player = PLAYERS.get(socket.id);
+        if (!player || !player.teamCode) return;
+
+        const points = 5;
+        const teamCode = player.teamCode;
+        const team = TEAMS.get(teamCode);
+
+        if (team) {
+            try {
+                // Firestore Update
+                await db.collection('teams').doc(teamCode).update({
+                    score: admin.firestore.FieldValue.increment(points)
+                });
+                // Cache Update
+                team.score += points;
+                io.emit('leaderboardUpdate', getLeaderboard());
+            } catch (e) {
+                console.error("Score update failed:", e);
+            }
+        }
+    });
+
+    socket.on('playerDeath', async () => {
+        const player = PLAYERS.get(socket.id);
+        if (!player || !player.teamCode) return;
+
+        const points = -5; // Deduct
+        const teamCode = player.teamCode;
+        const team = TEAMS.get(teamCode);
+
+        if (team) {
+            try {
+                // Firestore Update
+                await db.collection('teams').doc(teamCode).update({
+                    score: admin.firestore.FieldValue.increment(points)
+                }); // Can go negative? Yes.
+
+                // Cache Update
+                team.score += points;
+                io.emit('leaderboardUpdate', getLeaderboard());
+            } catch (e) {
+                console.error("Score update failed:", e);
             }
         }
     });
