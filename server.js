@@ -85,8 +85,29 @@ function getSafePosition(id) {
     return { x, y: 0.5, z };
 }
 
+// Assign positions with spacing check
+const assignedPositions = [];
 questions.forEach(q => {
-    q.position = getSafePosition(q.id);
+    let attempts = 0;
+    let pos;
+    let valid = false;
+
+    while (!valid && attempts < 10) {
+        pos = getSafePosition(q.id);
+
+        // Check distance to others
+        const tooClose = assignedPositions.some(p => {
+            const dx = p.x - pos.x;
+            const dz = p.z - pos.z;
+            return Math.sqrt(dx * dx + dz * dz) < 30; // Min spacing 30
+        });
+
+        if (!tooClose) valid = true;
+        attempts++;
+    }
+
+    q.position = pos;
+    assignedPositions.push(pos);
 });
 
 // In-memory cache for performance, sync with Firestore
@@ -238,6 +259,9 @@ io.on('connection', async (socket) => {
 
                 // Send solved state for this team
                 sock.emit('syncSolved', team.solvedQuestions || []);
+
+                // Broadcast Leaderboard update so new member appears immediately
+                io.emit('leaderboardUpdate', getLeaderboard());
             } else {
                 socket.emit('error', { message: "Invalid Team Code" });
             }
@@ -386,6 +410,7 @@ io.on('connection', async (socket) => {
                         socket.emit('answerResult', { correct: false, message: "Error or Already Solved" });
                     }
                 } else {
+                    console.log(`Entered incorrect answer: "${answer}"`);
                     socket.emit('answerResult', { correct: false });
                 }
             }
@@ -459,5 +484,7 @@ function getLeaderboard() {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`listening on *:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+    console.log("Don't try to hack this game. If caught hacking then your team will be disqualified.");
+    console.log("Developed by Happy Singh Rajpurohit");
 });

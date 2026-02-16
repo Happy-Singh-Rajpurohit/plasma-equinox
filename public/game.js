@@ -18,7 +18,7 @@ const npcMeshes = [];
 const collidables = [];
 const turrets = []; // New
 let player;
-let playerHP = 100; // New
+let playerHP = 200; // Increased HP
 let cameraTarget;
 let isGameActive = false;
 let isAuthenticated = false; // New flag
@@ -79,6 +79,12 @@ let mouseY = 0;
 
 function init() {
     console.log("Init called - Contest Mode");
+    console.log("Init called - Contest Mode");
+    console.log(
+        "%cDon't try to hack this game. If caught hacking then your team will be disqualified. %cDeveloped by Happy Singh Rajpurohit",
+        "color: red; font-size: 20px; font-weight: bold; background: #000; padding: 10px; border: 2px solid red;",
+        "color: #00ff00; font-size: 12px; font-weight: normal; background: #000; padding: 10px;"
+    );
 
     // 1. Setup Scene
     scene = new THREE.Scene();
@@ -770,7 +776,7 @@ function generateCity() {
     addRoadMarkings(halfCity);
 
     // Spawn Enemies
-    spawnTurrets(25);
+    spawnTurrets(20); // Increased to 20 but spread out
 }
 
 function addRoadMarkings(halfCity) {
@@ -1042,8 +1048,11 @@ function getValidSpawnLocation() {
 
         // Check density/crowding
         let tooClose = false;
-        // Avoid center spawn area
-        if (Math.abs(x) < 30 && Math.abs(z) < 30) tooClose = true;
+
+        // Avoid center spawn area (SAFE ZONE)
+        // Ensure distance from 0,0 is at least 50
+        const distFromCenter = Math.sqrt(x * x + z * z);
+        if (distFromCenter < 50) tooClose = true;
 
         if (!tooClose) {
             for (const t of turrets) {
@@ -1188,7 +1197,7 @@ function fireTurretProjectile(start, target) {
     const dir = new THREE.Vector3().subVectors(target, start).normalize();
 
     // Animate Projectile
-    const speed = 15;
+    const speed = 12; // Increased to 12 (was 8)
     const startTime = performance.now();
     const currentDir = dir.clone(); // Mutable direction for homing
     let currentPos = mesh.position.clone();
@@ -1279,14 +1288,14 @@ function damagePlayer(amount) {
 
     if (playerHP <= 0) {
         // Respawn
-        playerHP = 100;
+        playerHP = 200;
 
         // Random Respawn
         const pos = getValidSpawnLocation();
         player.mesh.position.set(pos.x, 0.5, pos.z);
 
         if (bar) bar.style.width = '100%';
-        if (text) text.innerText = '100 / 100';
+        if (text) text.innerText = '200 / 200';
 
         // Custom UI Message
         showToast("YOU DIED! -5 PTS", "#ff0000");
@@ -1658,6 +1667,24 @@ function setupSocket(token) {
 
     socket.on('answerResult', (result) => {
         if (result.correct) {
+            // Immediate Feedback & Removal
+            showToast("CORRECT! +100 PTS", "#00ff00");
+
+            if (interactableFlag) {
+                // Optimistic Removal
+                const fId = interactableFlag.data.id;
+                if (flags.has(fId)) {
+                    const f = flags.get(fId);
+                    // Animate out
+                    gsap.to(f.mesh.scale, {
+                        x: 0, y: 0, z: 0, duration: 0.3, onComplete: () => {
+                            scene.remove(f.mesh);
+                            flags.delete(fId);
+                        }
+                    });
+                }
+            }
+
             const modalContent = document.querySelector('.modal-content');
             gsap.to(modalContent, {
                 scale: 1.2, duration: 0.1, yoyo: true, repeat: 1, onComplete: () => {
@@ -1670,8 +1697,20 @@ function setupSocket(token) {
         } else {
             const modalContent = document.querySelector('.modal-content');
             gsap.fromTo(modalContent, { x: -10 }, { x: 10, duration: 0.05, repeat: 5, yoyo: true, clearProps: "x" });
-            document.getElementById('q-feedback').innerText = result.message || "ACCESS DENIED";
-            setTimeout(() => document.getElementById('q-feedback').innerText = "", 2000);
+
+            // Explicit Feedback
+            const feedback = document.getElementById('q-feedback');
+            feedback.innerText = "INCORRECT ANSWER";
+            feedback.style.color = "#ff0000";
+            feedback.style.display = "block";
+            feedback.style.opacity = "1";
+            feedback.style.fontWeight = "bold";
+            feedback.style.marginTop = "10px";
+
+            setTimeout(() => {
+                feedback.innerText = "";
+                feedback.style.display = "none"; // Hide again
+            }, 2000);
         }
     });
 
