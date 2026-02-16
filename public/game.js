@@ -335,7 +335,8 @@ function setupInput() {
         const movementY = e.movementY || e.mozMovementY || e.webkitMovementY || 0;
 
         mouseX -= movementX * 0.002;
-        mouseY -= movementY * 0.002;
+        // Inverted Y-axis as requested (Up = Look Up)
+        mouseY += movementY * 0.002;
 
         // Clamp Pitch - prevent looking too far up or down
         // Also need to ensure camera doesn't go below ground in updateCamera
