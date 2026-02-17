@@ -119,6 +119,7 @@ function generateCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
     for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+    console.log("Generated Code:", code);
     return code;
 }
 
@@ -203,8 +204,6 @@ io.on('connection', async (socket) => {
 
             // Firestore
             await db.collection('teams').doc(code).set(newTeam);
-            // Firestore
-            await db.collection('teams').doc(code).set(newTeam);
             // Use set with merge to create user doc if it doesn't exist
             await db.collection('users').doc(socket.user.uid).set({
                 teamCode: code,
@@ -244,9 +243,6 @@ io.on('connection', async (socket) => {
 
             if (team) {
                 // Update Firestore
-                await db.collection('teams').doc(teamCode).update({
-                    members: admin.firestore.FieldValue.arrayUnion(socket.user.uid)
-                });
                 await db.collection('teams').doc(teamCode).update({
                     members: admin.firestore.FieldValue.arrayUnion(socket.user.uid)
                 });
