@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Game is server-authoritative.
+    // Clients can read to sync state, but NEVER write directly.
+    // All writes must happen via the Node.js server (Admin SDK).
+    
+    match /{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

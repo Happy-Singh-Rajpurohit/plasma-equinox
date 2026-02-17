@@ -273,10 +273,14 @@ io.on('connection', async (socket) => {
 
     // 2. Game Logic
     socket.on('requestGameState', () => {
-        // Send all questions (masking answers ideally, but here we send all)
-        // Client filters out solved based on local state or we filter here
-        // For simplicity, send all, client hides solved ones.
-        socket.emit('gameState', questions);
+        // Send questions preventing answer leakage
+        const sanitizedQuestions = questions.map(q => ({
+            id: q.id,
+            question: q.question,
+            position: q.position,
+            isSolved: q.isSolved
+        }));
+        socket.emit('gameState', sanitizedQuestions);
 
         // Also sync team specific solved status
         const player = PLAYERS.get(socket.id);
