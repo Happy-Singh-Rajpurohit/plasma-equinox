@@ -203,7 +203,14 @@ io.on('connection', async (socket) => {
 
             // Firestore
             await db.collection('teams').doc(code).set(newTeam);
-            await db.collection('users').doc(socket.user.uid).update({ teamCode: code });
+            // Firestore
+            await db.collection('teams').doc(code).set(newTeam);
+            // Use set with merge to create user doc if it doesn't exist
+            await db.collection('users').doc(socket.user.uid).set({
+                teamCode: code,
+                email: socket.user.email,
+                displayName: playerName
+            }, { merge: true });
 
             // Cache
             TEAMS.set(code, newTeam);
@@ -240,7 +247,15 @@ io.on('connection', async (socket) => {
                 await db.collection('teams').doc(teamCode).update({
                     members: admin.firestore.FieldValue.arrayUnion(socket.user.uid)
                 });
-                await db.collection('users').doc(socket.user.uid).update({ teamCode: teamCode });
+                await db.collection('teams').doc(teamCode).update({
+                    members: admin.firestore.FieldValue.arrayUnion(socket.user.uid)
+                });
+                // Use set with merge to create user doc if it doesn't exist
+                await db.collection('users').doc(socket.user.uid).set({
+                    teamCode: teamCode,
+                    email: socket.user.email,
+                    displayName: playerName
+                }, { merge: true });
 
                 // Update Cache
                 if (!team.members.includes(socket.user.uid)) {
@@ -487,8 +502,27 @@ function getLeaderboard() {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log("Don't try to hack this game. If caught hacking then your team will be disqualified.");
-    console.log("Developed by Happy Singh Rajpurohit");
+
+async function loadTeams() {
+    try {
+        console.log("Loading teams from Firestore...");
+        TEAMS.clear(); // Ensure clean slate
+        const snapshot = await db.collection('teams').get();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            TEAMS.set(doc.id, data);
+            console.log(`- Loaded Team: ${data.name} (${data.score} pts)`);
+        });
+        console.log(`Loaded ${TEAMS.size} teams into cache.`);
+    } catch (e) {
+        console.error("Failed to load teams:", e);
+    }
+}
+
+loadTeams().then(() => {
+    server.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log("Don't try to hack this game. If caught hacking then your team will be disqualified.");
+        console.log("Developed by Happy Singh Rajpurohit");
+    });
 });
