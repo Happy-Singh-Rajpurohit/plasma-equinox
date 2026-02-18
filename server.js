@@ -260,16 +260,16 @@ io.on('connection', async (socket) => {
 
                 PLAYERS.set(socket.id, { id: socket.id, uid: socket.user.uid, name: playerName, teamCode: teamCode });
 
-                sock.join(teamCode);
-                sock.emit('teamJoined', {
+                socket.join(teamCode);
+                socket.emit('teamJoined', {
                     code: teamCode,
                     teamName: team.name,
-                    isLeader: team.leaderUid === sock.user.uid,
+                    isLeader: team.leaderUid === socket.user.uid,
                     score: team.score // Send initial score
                 });
 
                 // Send solved state for this team
-                sock.emit('syncSolved', team.solvedQuestions || []);
+                socket.emit('syncSolved', team.solvedQuestions || []);
 
                 // Broadcast Leaderboard update so new member appears immediately
                 io.emit('leaderboardUpdate', getLeaderboard());

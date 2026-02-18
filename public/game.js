@@ -1716,13 +1716,23 @@ function setupSocket(token) {
 
     // START Auth Handlers
     socket.on('teamJoined', (data) => {
-        // data: { code, teamName, isLeader, score }
-        console.log("Team Joined Data:", data);
+        console.log("🔥 SOCKET EVENT: teamJoined received!", data);
         isAuthenticated = true;
 
         // Hide Login, Show HUD
-        if (loginScreen) loginScreen.classList.add('hidden');
-        if (gameHud) gameHud.classList.remove('hidden');
+        if (loginScreen) {
+            console.log("Hiding login screen");
+            loginScreen.classList.add('hidden');
+        } else {
+            console.error("Login Screen element not found!");
+        }
+
+        if (gameHud) {
+            console.log("Showing HUD");
+            gameHud.classList.remove('hidden');
+        } else {
+            console.error("Game HUD element not found!");
+        }
 
         const tName = document.getElementById('hud-team-name');
         const tCode = document.getElementById('hud-team-code');
@@ -1732,9 +1742,6 @@ function setupSocket(token) {
 
         // Request Game State
         socket.emit('requestGameState');
-
-        // Auto-lock pointer to start
-        // user must click to lock usually, but we can try or wait for click
     });
 
     socket.on('leaderboardUpdate', (rankings) => {
@@ -1881,10 +1888,12 @@ function setupUI() {
     });
 
     btnSubmitJoin.addEventListener('click', () => {
+        console.log("Join Button Clicked");
         if (inputTeamCode.value.length !== 6) {
             errorMsg.innerText = "INVALID CODE LENGTH";
             return;
         }
+        console.log(`Emitting joinTeam: ${inputTeamCode.value.toUpperCase()}`);
         socket.emit('joinTeam', { playerName: currentUser.displayName, teamCode: inputTeamCode.value.toUpperCase() });
     });
 
