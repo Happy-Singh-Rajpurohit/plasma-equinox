@@ -10,26 +10,44 @@ app.use(express.static('public'));
 
 // Game State
 const questions = [
-    { id: 1, question: "What is the capital of France?", answer: "paris", position: { x: 0, y: 1, z: -10 }, isSolved: false },
-    { id: 2, question: "What is 2 + 2?", answer: "4", position: { x: 10, y: 1, z: 0 }, isSolved: false },
-    { id: 3, question: "What language is this server written in?", answer: "javascript", position: { x: -10, y: 1, z: 0 }, isSolved: false },
-    { id: 4, question: "What is the boiling point of water (C)?", answer: "100", position: { x: 0, y: 1, z: 10 }, isSolved: false },
-    { id: 5, question: "Which planet is known as the Red Planet?", answer: "mars", position: { x: 5, y: 1, z: 5 }, isSolved: false },
-    { id: 6, question: "What represents 'nothing' in JavaScript?", answer: "null", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 7, question: "Symbol for Iron?", answer: "fe", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 8, question: "Fastest land animal?", answer: "cheetah", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 9, question: "Largest ocean?", answer: "pacific", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 10, question: "Square root of 64?", answer: "8", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 11, question: "Capital of Japan?", answer: "tokyo", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 12, question: "How many bits in a byte?", answer: "8", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 13, question: "Color of the sky?", answer: "blue", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 14, question: "Opposite of cold?", answer: "hot", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 15, question: "Number of continents?", answer: "7", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 16, question: "HTML tag for image?", answer: "img", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 17, question: "Language for styling web?", answer: "css", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 18, question: "Frozen water is?", answer: "ice", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 19, question: "How many legs does a spider have?", answer: "8", position: { x: 0, y: 0, z: 0 }, isSolved: false },
-    { id: 20, question: "Capital of UK?", answer: "london", position: { x: 0, y: 0, z: 0 }, isSolved: false }
+    {
+        id: 1,
+        question: "This audio file sounds like static noise, but perhaps you’re looking at it the wrong way. Don't just listen—look at the sound.<br><br>Method: Use a tool like AudioPaint or Coagula to turn an image of text into a WAV file. When viewed in a Spectrogram (using Audacity), the text appears.<br><br><a href='https://drive.google.com/file/d/1WEEu48om3dtKn0rHF9kWaDxkVeCtwauk/view?usp=drive_link' target='_blank'>Download Audio File</a>",
+        answer: "isteCTF{v1su4l_v1brati0ns}",
+        position: { x: 0, y: 1, z: -10 },
+        isSolved: false
+    },
+    {
+        id: 2,
+        question: "The suspect sent this audio file to his accomplice. It sounds like just white noise and beeping, but we know there's text hidden inside. It's not Morse code.<br><br>Setup: Use a tool like DeepSound or Coagula to find the hidden text. Alternatively, open the audio in Audacity and switch to Spectrogram View to see the letters of the flag drawn in the sound waves.<br><br><a href='https://drive.google.com/file/d/1gUDS28HJTXURwun2r_yuMx2eROcye6AY/view?usp=drivesdk' target='_blank'>Download Audio File</a>",
+        answer: "isteCTF{s33_th3_s0und_w@v3s}",
+        position: { x: 10, y: 1, z: 0 },
+        isSolved: false
+    },
+    {
+        id: 3,
+        question: "This image of the Thapar University gate looks perfectly normal. Even if you turn up the brightness, nothing changes. But the red channel has a slight 'shiver' in its values.<br><br>The Setup:<br>Take a high-res photo.<br>Change the Red value of the first 20 pixels by just 1 unit (e.g., from 255 to 254) if the bit is 1, and leave it if it's 0.<br>This is a classic 'LSB Steganography' attack.<br><br><a href='https://drive.google.com/file/d/1xmQMnqsazQPTr7_cZb5iM-MV26m0ORIU/view?usp=drive_link' target='_blank'>Download Image</a>",
+        answer: "isteCTF{lsb_p1x3l_m4n1pul4t10n}",
+        position: { x: -10, y: 1, z: 0 },
+        isSolved: false
+    },
+    { id: 4, question: "The file is broken. The password is lost. The flag is buried. You have 3 layers of security to peel back. Can you find the 'Ghost in the Image'?<br><br><a href='https://drive.google.com/file/d/1x65T0p9l0TNbtpcck1CAWSRceIOhrOaH/view?usp=drive_link' target='_blank'>Open</a>", answer: "isteCTF{n3st3d_m4tr3ry0shka_d0ll}", position: { x: 0, y: 1, z: 10 }, isSolved: false },
+    { id: 5, question: "Our lead developer posted a screenshot of his new workspace, but he didn't realize his 'Pastebin' was visible in the reflection of his monitor. Find the link, find the flag.<br><br><a href='https://drive.google.com/file/d/1smGrYO-JJuBJBI4gCJ5zia3-fcnJvuWo/view?usp=drive_link' target='_blank'>Open</a>", answer: "isteCTF{0SINT_is_w4tching}", position: { x: 5, y: 1, z: 5 }, isSolved: false },
+    { id: 6, question: "This image looks like a solid black square. Some say it's modern art; we say it's a cover-up. Can you bring the light to the darkness?<br><br><a href='https://drive.google.com/file/d/1nqAh-Euhhm-R7jOldEGBTBK_kVyrXXc5/view?usp=drive_link' target='_blank'>Open</a>", answer: "isteCTF{l1ght_in_th3_dark}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 7, question: " An old voicemail from the past has resurfaced. At first, it sounds like meaningless noise—but history has a habit of repeating itself. Can you hear what time tried to hide?<br><br><a href='https://drive.google.com/file/d/1nRcNWD1Bu51A09Fkbrll8uWMMKudxRnz/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{r3v3r53_th3_p4st}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 8, question: "Two posters from different eras look identical. But has history been edited? Find the anomaly.<br><br><a href='https://drive.google.com/file/d/1I_0hmSOzzg4BxIM8qFuvLNvLj5f0eOnd/view?usp=sharing' target='_blank'>Image-1</a><br><br><a href='https://drive.google.com/file/d/1JtMfwWMv9X8RDZ0w6j8JPN-eUaGO3C_I/view?usp=sharing' target='_blank'>Image-2</a>", answer: "isteCTF{sp0t_th3_ch4ng3}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 9, question: "An image recovered from an obsolete system looks normal—but legends say it contains another file inside a file inside a file. How deep does time go?<br><br><a href='https://drive.google.com/file/d/1tJZbgVcojKX0FNWBCNnoFxHKsHwhyAja/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{l4y3rs_0f_t1m3}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 10, question: "You intercepted a corrupted image from a compromised server.<br>The image opens normally, but forensic logs suggest the file size is larger than expected. Something was hidden in plain sight. Investigate the file carefully. The truth is appended, not embedded.<br><br><a href='https://drive.google.com/file/d/1vf-fLKZSmw3JPOrkJufe26S3tqfzFJFl/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{fr4gm3nt3d_r34l1ty_2026}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 11, question: "An image recovered from an obsolete system looks normal—but legends say it contains another file inside a file inside a file. How deep does time go?<br><br><a href='https://drive.google.com/file/d/1tJZbgVcojKX0FNWBCNnoFxHKsHwhyAja/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{l4y3rs_0f_t1m3}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 12, question: "The waveform looks structured but meaningless. What if the message flows backward in time?<br><br><a href='https://drive.google.com/file/d/1IWxZeCnZrl65eKM6rXbdOOjQc9sFEAKg/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{r3v3rs3_th3_w4v3}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 13, question: "The binary dump contains no readable strings.But encryption leaves patterns. Find the shadow key.<br><br><a href='https://drive.google.com/file/d/1zS56br9p0zXmS_2ETAaG-og-wvuQ0I6U/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{x0r_sh4d0w_crypt}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 14, question: "A memory dump fragment was recovered.It’s mostly random noise. But noise sometimes hides signals.<br><br><a href='https://drive.google.com/file/d/1NGEcVwTkDlg7xyay_tYFdg4tBJqfjGsW/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{b1n4ry_gh0st_pr0t0c0l}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 15, question: "A password-protected PDF has surfaced. Within the text lies something you might not expect. Can you uncover the secret and claim the flag?<br><br><a href='https://drive.google.com/file/d/1Rjicm4XR1slWoKOcxAw-z4cQ6Wsajj4i/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{morsecodeftw}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 16, question: "A massive file named bigZip  has surfaced. Inside, there’s something important—but it’s buried beneath layers. Can you extract the truth hidden within?<br><br><a href='https://drive.google.com/file/d/1_PWUl9TdAti76jDsOWnLaFE-vhndbLvc/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{se@rch3d_@_l0t_343fdr43efscd2}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 17, question: "You’ve encountered two images, both seemingly identical, yet something is hidden in plain sight. Can you discern which one holds the key?<br><br><a href='https://drive.google.com/drive/folders/1DrOgx5LXJEfo_HoSkG_ZUsfhWqNKDukj?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{blurry}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 18, question: "A mysterious music cipher has appeared, its melody holding the key to the next stage. Can you uncover the message hidden within?<br><br><a href='https://drive.google.com/file/d/1YTjic49No3m21mzQ1r3WEWDm3WffEomp/view?usp=sharing' target='_blank'>Open</a>", answer: "isteCTF{music}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 19, question: "A song file is waiting to be decoded. Can you translate the notes and uncover its melody?<br><br><a href='https://drive.google.com/file/d/1jCDiNGuDTv2dh82_8JO3GIu9pVVCZk9C/view?usp=drive_link' target='_blank'>Open</a>", answer: "isteCTF{doyouknowhowtoplaymusicwithyourkeyboard}", position: { x: 0, y: 0, z: 0 }, isSolved: false },
+    { id: 20, question: "A simple website, a deeper mystery. Will you uncover what’s waiting to be found? <br><br><a href='https://web-flag1.vercel.app/' target='_blank'>Open</a>", answer: "isteCTF{console_da_best}", position: { x: 0, y: 0, z: 0 }, isSolved: false }
 ];
 
 // Safe Spawning Logic
@@ -382,7 +400,7 @@ io.on('connection', async (socket) => {
 
                 if (question.answer.toLowerCase() === String(answer).toLowerCase().trim()) {
                     // Correct
-                    const points = 100;
+                    const points = 200;
                     const now = admin.firestore.Timestamp.now();
 
                     try {

@@ -1378,7 +1378,7 @@ function openModal(data) {
     isGameActive = false;
     document.exitPointerLock();
 
-    qText.innerText = data.question;
+    qText.innerHTML = data.question;
     qInput.value = '';
     modal.classList.remove('hidden');
 
